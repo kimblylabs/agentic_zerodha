@@ -1,0 +1,90 @@
+from __future__ import annotations
+
+import json
+import sys
+from contextlib import AsyncExitStack
+from typing import Any, Optional
+
+from zerodha_agent.config.settings import Settings
+
+
+class ZerodhaMCPClient:
+    def __init__(self, settings: Settings):
+        self.settings = settings
+
+    async def call_tool(self, tool_name: str, arguments: Optional[dict[str, Any]] = None) -> Any:
+        if not self.settings.zerodha_mcp_enabled:
+            return self._demo_response(tool_name, arguments or {})
+
+        command_parts = self.settings.mcp_command_parts
+        if not command_parts:
+            raise RuntimeError("ZERODHA_MCP_COMMAND is required when MCP is enabled.")
+
+        if self.settings.zerodha_mcp_transport != "stdio":
+            raise RuntimeError("Only stdio MCP transport is implemented in this scaffold.")
+
+        try:
+            from mcp import ClientSession, StdioServerParameters
+            from mcp.client.stdio import stdio_client
+        except ImportError as exc:
+            raise RuntimeError(
+                "The mcp package is required for live Zerodha MCP mode. "
+                "Use Python 3.10+ and install requirements again."
+            ) from exc
+
+        command = sys.executable if command_parts[0] in {"python", "python3"} else command_parts[0]
+        params = StdioServerParameters(
+            command=command,
+            args=command_parts[1:],
+        )
+
+        async with AsyncExitStack() as stack:
+            read_stream, write_stream = await stack.enter_async_context(stdio_client(params))
+            session = await stack.enter_async_context(ClientSession(read_stream, write_stream))
+            await session.initialize()
+            result = await session.call_tool(tool_name, arguments or {})
+            return self._normalize_content(result.content)
+
+    def _normalize_content(self, content: Any) -> Any:
+        if not content:
+            return {}
+
+        values: list[Any] = []
+        for item in content:
+            text = getattr(item, "text", None)
+            if text is None:
+                values.append(item.model_dump() if hasattr(item, "model_dump") else item)
+                continue
+            try:
+                values.append(json.loads(text))
+            except json.JSONDecodeError:
+                values.append(text)
+
+        return values[0] if len(values) == 1 else values
+
+    def _demo_response(self, tool_name: str, arguments: dict[str, Any]) -> Any:
+        demo = {
+            self.settings.profile_tool: {
+                "user_name": "Demo Zerodha User",
+                "email": "demo@example.com",
+                "broker": "ZERODHA",
+            },
+            self.settings.margins_tool: {
+                "available": {"cash": 125000.0, "collateral": 25000.0},
+                "utilised": {"debits": 34000.0, "span": 0.0},
+            },
+            self.settings.holdings_tool: [
+                {"tradingsymbol": "INFY", "quantity": 10, "average_price": 1420.5, "last_price": 1512.8},
+                {"tradingsymbol": "TCS", "quantity": 4, "average_price": 3520.0, "last_price": 3661.2},
+            ],
+            self.settings.positions_tool: [
+                {"tradingsymbol": "NIFTY26MAYFUT", "quantity": 50, "pnl": 2850.0},
+            ],
+            self.settings.orders_tool: [
+                {"order_id": "demo-001", "tradingsymbol": "INFY", "status": "COMPLETE", "quantity": 10},
+            ],
+            self.settings.place_order_tool: {"status": "mock_submitted", "arguments": arguments},
+            self.settings.cancel_order_tool: {"status": "mock_cancelled", "arguments": arguments},
+            self.settings.modify_order_tool: {"status": "mock_modified", "arguments": arguments},
+        }
+        return demo.get(tool_name, {"status": "mock_ok", "tool": tool_name, "arguments": arguments})
