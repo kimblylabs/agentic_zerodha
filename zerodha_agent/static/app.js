@@ -10,9 +10,9 @@ const state = {
   },
 };
 
-const WAKE_PHRASE = "hey kimbly";
+const WAKE_PHRASE = "hello";
 const WAKE_WORD_PATTERN =
-  /\b(?:hey|hi|hello|ok|okay)\s+(?:kimbly|kimbly|kimbli|kimberly|kimberley)\b/;
+  /\b(?:hello|helloo|helo|hallo|hullo)(?:\s+(?:kimbly|kimbli|kimberly|kimberley))?\b/;
 const VOICE_QUERY_SILENCE_MS = 1800;
 
 const formatCurrency = (value) => {
