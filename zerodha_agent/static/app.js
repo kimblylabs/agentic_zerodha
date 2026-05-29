@@ -10,6 +10,8 @@ const state = {
 };
 
 const WAKE_PHRASE = "hey kimbly";
+const WAKE_WORD_PATTERN =
+  /\b(?:hey|hi|hello|ok|okay)\s+(?:kimbly|kimbly|kimbli|kimberly|kimberley)\b/;
 const VOICE_QUERY_SILENCE_MS = 1800;
 
 const formatCurrency = (value) => {
@@ -139,6 +141,18 @@ function normalizeSpeechText(text) {
     .trim();
 }
 
+function findWakePhrase(normalizedText) {
+  const match = normalizedText.match(WAKE_WORD_PATTERN);
+  if (!match || typeof match.index !== "number") {
+    return null;
+  }
+  return {
+    start: match.index,
+    end: match.index + match[0].length,
+    phrase: match[0],
+  };
+}
+
 function updateVoiceStatus(mode, hintOverride = "") {
   const indicator = el("voiceIndicator");
   const title = el("voiceStateTitle");
@@ -214,13 +228,13 @@ function handleVoiceFinalTranscript(transcript) {
   const normalized = normalizeSpeechText(transcript);
   if (!normalized) return;
 
-  const wakeIndex = normalized.indexOf(WAKE_PHRASE);
-  if (wakeIndex >= 0) {
+  const wake = findWakePhrase(normalized);
+  if (wake) {
     state.voice.armed = true;
     state.voice.queryBuffer = "";
     updateVoiceStatus("wake");
 
-    const remaining = normalized.slice(wakeIndex + WAKE_PHRASE.length).trim();
+    const remaining = normalized.slice(wake.end).trim();
     if (remaining) {
       state.voice.queryBuffer = remaining;
       clearVoiceFinalizeTimer();
@@ -285,12 +299,36 @@ function initVoiceControls() {
     for (let i = event.resultIndex; i < event.results.length; i += 1) {
       const result = event.results[i];
       const transcript = result[0].transcript || "";
+      const normalized = normalizeSpeechText(transcript);
       if (!result.isFinal) {
+        if (!state.voice.armed) {
+          const wake = findWakePhrase(normalized);
+          if (wake) {
+            state.voice.armed = true;
+            state.voice.queryBuffer = "";
+            updateVoiceStatus("wake", `Detected: ${wake.phrase}`);
+
+            const remaining = normalized.slice(wake.end).trim();
+            if (remaining) {
+              state.voice.queryBuffer = remaining;
+              updateVoiceStatus("capturing", "Keep speaking...");
+              clearVoiceFinalizeTimer();
+              state.voice.finalizeTimer = setTimeout(
+                finalizeVoiceQuery,
+                VOICE_QUERY_SILENCE_MS,
+              );
+            }
+            continue;
+          }
+        }
+
         if (state.voice.armed) {
           updateVoiceStatus(
             "capturing",
             `Heard: ${transcript.trim() || "..."}`,
           );
+        } else if (state.voice.enabled) {
+          updateVoiceStatus("idle", `Heard: ${transcript.trim() || "..."}`);
         }
         continue;
       }
@@ -304,9 +342,9 @@ function initVoiceControls() {
     }
   };
 
-  recognition.onerror = () => {
+  recognition.onerror = (event) => {
     if (state.voice.enabled) {
-      updateVoiceStatus("error");
+      updateVoiceStatus("error", `Mic error: ${event?.error || "retrying"}`);
     }
   };
 
