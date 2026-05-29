@@ -1,3 +1,5 @@
+import asyncio
+
 from zerodha_agent.services.kite_service import KiteService
 from kiteconnect.exceptions import KiteException
 
@@ -74,3 +76,21 @@ def cancel_order(order_id):
         return kite_service.cancel_order(order_id)
     except KiteException as e:
         return {"error": str(e)}
+
+
+async def get_account_status():
+    """Aggregate all account data into a single snapshot for the agent."""
+    profile, holdings, positions, orders, margins = await asyncio.gather(
+        asyncio.to_thread(get_profile),
+        asyncio.to_thread(get_holdings),
+        asyncio.to_thread(get_positions),
+        asyncio.to_thread(get_orders),
+        asyncio.to_thread(get_margins),
+    )
+    return {
+        "profile": profile,
+        "holdings": holdings,
+        "positions": positions,
+        "orders": orders,
+        "margins": margins,
+    }

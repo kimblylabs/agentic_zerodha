@@ -4,41 +4,72 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Zerodha Agent</title>
-    <link rel="stylesheet" href="/static/styles.css" />
+    <meta
+      http-equiv="Cache-Control"
+      content="no-store, no-cache, must-revalidate"
+    />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260529" />
   </head>
   <body>
+    <div class="backdrop backdrop-one"></div>
+    <div class="backdrop backdrop-two"></div>
+
     <main class="shell">
-      <section class="topbar">
-        <div>
-          <p class="eyebrow">Zerodha MCP</p>
-                    <p class="eyebrow">Zerodha Direct</p>
-          <h1>Account Console</h1>
+      <section class="hero panel">
+        <div class="hero-copy">
+          <p class="eyebrow">Zerodha Agent</p>
+          <h1>Account Operations Console</h1>
+          <p class="hero-text">
+            Monitor holdings, review order flow, and approve live trades from a
+            single professional-grade workspace.
+          </p>
         </div>
-        <button
-          id="refreshStatus"
-          class="icon-button"
-          title="Refresh account status"
-        >
-          Refresh
-        </button>
+        <div class="hero-actions">
+          <div class="pill status-pill">
+            <span class="pill-dot"></span>
+            Live session
+          </div>
+          <div
+            id="voiceIndicator"
+            class="voice-indicator state-off"
+            aria-live="polite"
+          >
+            <span class="voice-orb" aria-hidden="true"></span>
+            <div class="voice-copy">
+              <strong id="voiceStateTitle">Voice Off</strong>
+              <span id="voiceStateHint">Click Enable Voice</span>
+            </div>
+          </div>
+          <button id="voiceToggle" class="secondary" type="button">
+            Enable Voice
+          </button>
+          <button
+            id="refreshStatus"
+            class="icon-button"
+            title="Refresh account status"
+          >
+            Refresh Data
+          </button>
+        </div>
       </section>
 
       <section class="status-grid">
-        <article class="panel account-panel">
+        <article class="panel account-panel panel-accent">
           <div class="panel-heading">
-            <h2>Account</h2>
-            <span id="mcpState" class="badge">Checking</span>
+            <div>
+              <p class="section-label">Overview</p>
+              <h2>Account Snapshot</h2>
+            </div>
           </div>
-          <button id="connectZerodha" style="margin-bottom: 1em">
-
-
           <div id="profile" class="profile"></div>
           <div class="metric-row">
-            <div>
+            <div class="metric-card">
               <span>Available Cash</span>
               <strong id="availableCash">-</strong>
             </div>
-            <div>
+            <div class="metric-card">
               <span>Utilised</span>
               <strong id="utilisedMargin">-</strong>
             </div>
@@ -47,34 +78,35 @@
 
         <article class="panel">
           <div class="panel-heading">
-            <h2>Holdings</h2>
-            <span id="holdingCount" class="muted">0</span>
+            <div>
+              <p class="section-label">Portfolio</p>
+              <h2>Holdings</h2>
+            </div>
+            <span id="holdingCount" class="badge">0</span>
           </div>
           <div id="holdings" class="table-list"></div>
         </article>
 
         <article class="panel">
           <div class="panel-heading">
-            <h2>Positions</h2>
-            <span id="positionCount" class="muted">0</span>
+            <div>
+              <p class="section-label">Exposure</p>
+              <h2>Positions</h2>
+            </div>
+            <span id="positionCount" class="badge">0</span>
           </div>
           <div id="positions" class="table-list"></div>
-        </article>
-
-        <article class="panel">
-          <div class="panel-heading">
-            <h2>Orders</h2>
-            <span id="orderCount" class="muted">0</span>
-          </div>
-          <div id="orders" class="table-list"></div>
         </article>
       </section>
 
       <section class="workspace">
-        <article class="panel chat-panel">
+        <article class="panel chat-panel panel-elevated">
           <div class="panel-heading">
-            <h2>Agent Chat</h2>
-            <span id="threadId" class="muted">New thread</span>
+            <div>
+              <p class="section-label">Assistant</p>
+              <h2>Agent Chat</h2>
+            </div>
+            <span id="threadId" class="badge">New thread</span>
           </div>
           <div id="messages" class="messages"></div>
           <form id="chatForm" class="chat-form">
@@ -84,19 +116,22 @@
               autocomplete="off"
               placeholder="Ask about holdings, margins, orders, or prepare a trade..."
             />
-            <button type="submit">Send</button>
+            <button id="sendBtn" type="submit">Send</button>
           </form>
         </article>
 
-        <article class="panel approval-panel">
+        <article class="panel approval-panel panel-elevated">
           <div class="panel-heading">
-            <h2>HITL Approvals</h2>
-            <span id="approvalCount" class="muted">0 pending</span>
+            <div>
+              <p class="section-label">Controls</p>
+              <h2>HITL Approvals</h2>
+            </div>
+            <span id="approvalCount" class="badge">0 pending</span>
           </div>
           <div id="approvals" class="approval-list"></div>
         </article>
       </section>
     </main>
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=20260529"></script>
   </body>
 </html>

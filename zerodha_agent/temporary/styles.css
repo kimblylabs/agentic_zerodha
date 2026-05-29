@@ -1,0 +1,223 @@
+:root {
+  color-scheme: light;
+  --bg: #f7f8fb;
+  --panel: #ffffff;
+  --ink: #18202f;
+  --muted: #697386;
+  --line: #dfe4ec;
+  --green: #0f8f5f;
+  --red: #c2413d;
+  --blue: #2864c9;
+  --amber: #b7791f;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.shell {
+  width: min(1400px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 24px 0;
+}
+
+.topbar, .panel-heading, .metric-row, .chat-form, .approval-actions {
+  display: flex;
+  align-items: center;
+}
+
+.topbar           { justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.eyebrow, .muted,
+.metric-row span  { color: var(--muted); font-size: 13px; }
+.eyebrow          { margin: 0 0 4px; text-transform: uppercase; font-weight: 700; }
+h1, h2, p         { margin: 0; }
+h1                { font-size: 30px; }
+h2                { font-size: 16px; }
+
+button {
+  border: 0; border-radius: 6px; background: var(--blue); color: white;
+  cursor: pointer; font-weight: 700; min-height: 40px; padding: 0 16px;
+  transition: opacity .15s;
+}
+button.secondary { background: #eef2f7; color: var(--ink); }
+button.danger    { background: var(--red); }
+button:disabled  { cursor: progress; opacity: 0.55; }
+
+.status-grid, .workspace { display: grid; gap: 16px; }
+.status-grid  { grid-template-columns: 1.2fr 1fr 1fr 1fr; }
+.workspace    { grid-template-columns: 1.6fr 1fr; margin-top: 16px; }
+
+.panel {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 8px; padding: 18px; min-width: 0;
+}
+.panel-heading { justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+
+/* order status badges */
+.status-badge {
+  font-size: 11px; font-weight: 600; padding: 2px 8px;
+  border-radius: 999px; background: #eef2f7; color: var(--muted);
+}
+.status-complete              { background: #e8f6ef; color: var(--green); }
+.status-open                  { background: #eef4ff; color: var(--blue);  }
+.status-rejected,
+.status-cancelled             { background: #fdf0f0; color: var(--red);   }
+.status-pending               { background: #fff5dc; color: var(--amber); }
+
+/* risk labels */
+.risk-high   { color: var(--red);   font-weight: 600; }
+.risk-medium { color: var(--amber); font-weight: 600; }
+.risk-low    { color: var(--green); font-weight: 600; }
+
+.profile { display: grid; gap: 6px; margin-bottom: 18px; min-height: 50px; }
+.profile strong { display: block; font-size: 18px; }
+
+.metric-row { gap: 12px; }
+.metric-row > div { flex: 1; border: 1px solid var(--line); border-radius: 6px; padding: 12px; }
+.metric-row strong { display: block; margin-top: 6px; font-size: 18px; }
+
+.table-list, .approval-list, .messages { display: grid; gap: 10px; }
+.row, .approval-card, .message { border: 1px solid var(--line); border-radius: 6px; padding: 12px; }
+.row         { display: grid; gap: 6px; }
+.row-top     { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.row small   { color: var(--muted); }
+
+/* ── chat ── */
+.chat-panel { min-height: 560px; display: grid; grid-template-rows: auto 1fr auto; }
+.messages   { align-content: start; max-height: 430px; overflow: auto; padding-right: 4px; }
+
+.message        { line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+.message.user   { background: #eef4ff; border-color: #cfe0ff; }
+.message.agent  { background: #f9fafb; }
+.message.agent.success { background: #e8f6ef; border-color: #b2dfc9; }
+
+.message-content {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.markdown h3,
+.markdown h4,
+.markdown h5,
+.markdown p {
+  margin: 0;
+}
+
+.markdown h3,
+.markdown h4,
+.markdown h5 {
+  letter-spacing: -0.02em;
+}
+
+.markdown h3 { font-size: 18px; }
+.markdown h4 { font-size: 16px; }
+.markdown h5 { font-size: 15px; }
+
+.markdown p {
+  line-height: 1.6;
+}
+
+.md-list {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 6px;
+}
+
+.md-list li {
+  line-height: 1.6;
+}
+
+.md-spacer {
+  height: 2px;
+}
+
+.markdown code {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.16);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.95em;
+}
+
+/* blinking cursor during streaming */
+.cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: var(--ink);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: blink .7s step-end infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+.chat-form { gap: 10px; margin-top: 16px; }
+.chat-form input {
+  flex: 1; border: 1px solid var(--line); border-radius: 6px;
+  font: inherit; min-height: 44px; min-width: 0; padding: 0 12px;
+}
+
+/* ── HITL approval cards ── */
+.approval-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  background: #fffdf5;
+  border-left: 4px solid var(--amber);
+}
+
+.approval-header { display: flex; justify-content: space-between; align-items: flex-start; }
+
+/* argument table inside approval card */
+.arg-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.arg-table tr + tr td { border-top: 1px solid var(--line); }
+.arg-key {
+  padding: 5px 10px 5px 0;
+  color: var(--muted);
+  white-space: nowrap;
+  width: 40%;
+}
+.arg-val {
+  padding: 5px 0;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.raw-instruction {
+  font-size: 12px;
+  font-style: italic;
+  padding: 4px 0;
+}
+
+.approval-actions { justify-content: flex-end; gap: 8px; padding-top: 4px; }
+
+.empty {
+  color: var(--muted); border: 1px dashed var(--line);
+  border-radius: 6px; padding: 16px; text-align: center; font-size: 13px;
+}
+
+/* ── responsive ── */
+@media (max-width: 1100px) {
+  .status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .workspace   { grid-template-columns: 1fr; }
+}
+@media (max-width: 680px) {
+  .shell       { width: min(100vw - 20px, 1400px); padding: 14px 0; }
+  .topbar,
+  .metric-row,
+  .chat-form   { align-items: flex-start; flex-direction: column; }
+  .status-grid { grid-template-columns: 1fr; }
+  .chat-panel  { min-height: 520px; }
+}

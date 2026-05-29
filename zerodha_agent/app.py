@@ -1,18 +1,19 @@
 from __future__ import annotations
 
+import json
 import logging
-from datetime import datetime, timezone
+import traceback
 from typing import Any, Optional
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from zerodha_agent.config.settings import get_settings
-from zerodha_agent.graph.graph import build_graph
+from zerodha_agent.graph.graph import build_graph, stream_response
 from zerodha_agent.graph.state import PendingAction
 from zerodha_agent.tools import trading_tools
 
@@ -54,21 +55,8 @@ async def index() -> FileResponse:
 @app.get("/api/account/status", response_class=JSONResponse)
 async def account_status() -> JSONResponse:
     try:
-        profile = trading_tools.get_profile()
-        holdings = trading_tools.get_holdings()
-        positions = trading_tools.get_positions()
-        orders = trading_tools.get_orders()
-        margins = trading_tools.get_margins()
-        return {
-            "profile": profile,
-            "holdings": holdings,
-            "positions": positions,
-            "orders": orders,
-            "margins": margins,
-        }
+        return await trading_tools.get_account_status()
     except Exception as e:
-        import traceback
-
         tb = traceback.format_exc()
         logging.error(f"Error in /api/account/status: {e}\n{tb}")
         return JSONResponse(
@@ -106,6 +94,41 @@ async def chat(request: ChatRequest) -> dict[str, Any]:
     return response
 
 
+@app.post("/api/chat/stream")
+async def chat_stream(request: ChatRequest) -> StreamingResponse:
+    thread_id = request.thread_id or str(uuid4())
+    account_status = await trading_tools.get_account_status()
+
+    async def event_generator():
+        try:
+            async for token in stream_response(request.message, account_status):
+                if token.startswith("__PENDING_ACTION__:"):
+                    raw = token[len("__PENDING_ACTION__:") :]
+                    pending_action = json.loads(raw)
+                    action_id = str(uuid4())
+                    pending_action["id"] = action_id
+                    pending_actions[action_id] = PendingAction(**pending_action)
+                    pending_payload = pending_actions[action_id].model_dump()
+                    pending_payload["thread_id"] = thread_id
+                    yield f"data: {json.dumps({'type': 'pending_action', 'data': pending_payload})}\n\n"
+                else:
+                    yield f"data: {json.dumps({'type': 'token', 'data': token})}\n\n"
+
+            yield f"data: {json.dumps({'type': 'done', 'thread_id': thread_id})}\n\n"
+        except Exception as e:
+            logging.error(f"Error in /api/chat/stream: {e}\n{traceback.format_exc()}")
+            yield f"data: {json.dumps({'type': 'error', 'data': str(e)})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @app.get("/api/actions")
 async def list_actions() -> list[dict[str, Any]]:
     return [action.model_dump() for action in pending_actions.values()]
@@ -121,13 +144,100 @@ async def decide_action(action_id: str, decision: ActionDecision) -> dict[str, A
         pending_actions.pop(action_id, None)
         return {
             "status": "rejected",
-            "message": f"{action.name} was rejected by the user.",
+            "message": f"{action.name} was rejected.",
         }
 
-    result = await tools.execute_trading_action(action.name, action.arguments)
+    # Execute the trading action via the correct tool
+    action_map = {
+        "place_order": lambda: _execute_place_order(action.arguments),
+        "cancel_order": lambda: trading_tools.cancel_order(
+            action.arguments.get("order_id")
+        ),
+        "modify_order": lambda: trading_tools.modify_order(
+            action.arguments.get("order_id"),
+            **{k: v for k, v in action.arguments.items() if k != "order_id"},
+        ),
+    }
+
+    handler = action_map.get(action.name)
+    if not handler:
+        raise HTTPException(status_code=400, detail=f"Unknown action: {action.name}")
+
+    try:
+        result = handler()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
     pending_actions.pop(action_id, None)
+    message = f"{action.name} was approved and submitted."
+    if action.name == "place_order":
+        order_id = _extract_order_id(result)
+        message = (
+            f"{action.name} was approved and submitted to Zerodha. Order ID: {order_id}"
+        )
     return {
         "status": "executed",
-        "message": f"{action.name} was approved and submitted.",
+        "message": message,
         "result": result,
     }
+
+
+def _execute_place_order(arguments: dict[str, Any]) -> Any:
+    order_args = {k: v for k, v in arguments.items() if k != "raw_instruction"}
+    required = [
+        "tradingsymbol",
+        "exchange",
+        "transaction_type",
+        "quantity",
+        "order_type",
+        "product",
+    ]
+    missing = [key for key in required if key not in order_args]
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Missing required order fields: {', '.join(missing)}",
+        )
+
+    if (
+        order_args.get("order_type") == "MARKET"
+        and "market_protection" not in order_args
+    ):
+        order_args["market_protection"] = -1
+
+    result = trading_tools.place_order(**order_args)
+
+    if isinstance(result, dict) and result.get("error"):
+        raise HTTPException(
+            status_code=502, detail=f"Kite order rejected: {result['error']}"
+        )
+
+    order_id = _extract_order_id(result)
+    if not order_id:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Kite returned an unexpected order response: {result!r}",
+        )
+
+    return {"order_id": order_id, "submitted": True, "result": result}
+
+
+def _extract_order_id(result: Any) -> str | None:
+    if isinstance(result, str):
+        return result.strip() or None
+    if isinstance(result, dict):
+        value = (
+            result.get("order_id")
+            or result.get("data", {}).get("order_id")
+            or result.get("result", {}).get("order_id")
+        )
+        return str(value) if value else None
+    if isinstance(result, (list, tuple)) and result:
+        return _extract_order_id(result[0])
+    return None
+
+
+def _chunk_text(text: str, chunk_size: int) -> list[str]:
+    if not text:
+        return []
+    return [text[i : i + chunk_size] for i in range(0, len(text), chunk_size)]

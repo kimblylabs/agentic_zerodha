@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shlex
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
@@ -26,16 +25,6 @@ class Settings(BaseSettings):
     zerodha_api_key: Optional[str] = None
     zerodha_api_secret: Optional[str] = None
     zerodha_access_token: Optional[str] = None
-
-    # login_tool removed (no login flow)
-    profile_tool: str = "get_profile"
-    margins_tool: str = "get_margins"
-    holdings_tool: str = "get_holdings"
-    positions_tool: str = "get_positions"
-    orders_tool: str = "get_orders"
-    place_order_tool: str = "place_order"
-    cancel_order_tool: str = "cancel_order"
-    modify_order_tool: str = "modify_order"
 
     project_root: Path = Path(__file__).resolve().parents[1]
     static_dir: Path = project_root / "static"

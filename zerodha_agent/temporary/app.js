@@ -1,16 +1,4 @@
-const state = {
-  threadId: null,
-  voice: {
-    enabled: false,
-    armed: false,
-    recognition: null,
-    queryBuffer: "",
-    finalizeTimer: null,
-  },
-};
-
-const WAKE_PHRASE = "hey kimbly";
-const VOICE_QUERY_SILENCE_MS = 1800;
+const state = { threadId: null };
 
 const formatCurrency = (value) => {
   if (typeof value !== "number") return "-";
@@ -38,18 +26,12 @@ const setHTML = (id, value) => {
 function escapeHtml(text) {
   return String(text).replace(/[&<>"']/g, (character) => {
     switch (character) {
-      case "&":
-        return "&amp;";
-      case "<":
-        return "&lt;";
-      case ">":
-        return "&gt;";
-      case '"':
-        return "&quot;";
-      case "'":
-        return "&#39;";
-      default:
-        return character;
+      case "&": return "&amp;";
+      case "<": return "&lt;";
+      case ">": return "&gt;";
+      case '"': return "&quot;";
+      case "'": return "&#39;";
+      default: return character;
     }
   });
 }
@@ -84,9 +66,7 @@ function renderMarkdown(rawText) {
     if (heading) {
       closeList();
       const level = Math.min(heading[1].length + 2, 5);
-      html.push(
-        `<h${level} class="md-heading">${formatInlineMarkdown(heading[2])}</h${level}>`,
-      );
+      html.push(`<h${level} class="md-heading">${formatInlineMarkdown(heading[2])}</h${level}>`);
       continue;
     }
 
@@ -125,203 +105,8 @@ async function fetchJson(url, options = {}) {
     headers: { "Content-Type": "application/json" },
     ...options,
   });
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
+  if (!response.ok) throw new Error(await response.text());
   return response.json();
-}
-
-function normalizeSpeechText(text) {
-  return String(text || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function updateVoiceStatus(mode, hintOverride = "") {
-  const indicator = el("voiceIndicator");
-  const title = el("voiceStateTitle");
-  const hint = el("voiceStateHint");
-  if (!indicator || !title || !hint) return;
-
-  const states = {
-    off: {
-      title: "Voice Off",
-      hint: "Click Enable Voice",
-      className: "state-off",
-    },
-    unsupported: {
-      title: "Voice Unavailable",
-      hint: "Browser speech recognition not supported",
-      className: "state-error",
-    },
-    idle: {
-      title: "Ready",
-      hint: `Say \"${WAKE_PHRASE}\"`,
-      className: "state-idle",
-    },
-    wake: {
-      title: "Wake Detected",
-      hint: "Speak your query now",
-      className: "state-wake",
-    },
-    capturing: {
-      title: "Listening",
-      hint: "Capturing your query",
-      className: "state-capturing",
-    },
-    error: {
-      title: "Mic Error",
-      hint: "Retrying voice input",
-      className: "state-error",
-    },
-  };
-
-  const selected = states[mode] || states.off;
-  title.textContent = selected.title;
-  hint.textContent = hintOverride || selected.hint;
-  indicator.classList.remove(
-    "state-off",
-    "state-idle",
-    "state-wake",
-    "state-capturing",
-    "state-error",
-  );
-  indicator.classList.add(selected.className);
-}
-
-function clearVoiceFinalizeTimer() {
-  if (state.voice.finalizeTimer) {
-    clearTimeout(state.voice.finalizeTimer);
-    state.voice.finalizeTimer = null;
-  }
-}
-
-function finalizeVoiceQuery() {
-  clearVoiceFinalizeTimer();
-  const query = state.voice.queryBuffer.trim();
-  state.voice.queryBuffer = "";
-  state.voice.armed = false;
-  updateVoiceStatus(state.voice.enabled ? "idle" : "off");
-  if (query) {
-    updateVoiceStatus("capturing", "Sending your query...");
-    void submitQuery(query);
-  }
-}
-
-function handleVoiceFinalTranscript(transcript) {
-  const normalized = normalizeSpeechText(transcript);
-  if (!normalized) return;
-
-  const wakeIndex = normalized.indexOf(WAKE_PHRASE);
-  if (wakeIndex >= 0) {
-    state.voice.armed = true;
-    state.voice.queryBuffer = "";
-    updateVoiceStatus("wake");
-
-    const remaining = normalized.slice(wakeIndex + WAKE_PHRASE.length).trim();
-    if (remaining) {
-      state.voice.queryBuffer = remaining;
-      clearVoiceFinalizeTimer();
-      state.voice.finalizeTimer = setTimeout(finalizeVoiceQuery, 400);
-    }
-    return;
-  }
-
-  if (!state.voice.armed) return;
-
-  state.voice.queryBuffer = `${state.voice.queryBuffer} ${normalized}`.trim();
-  updateVoiceStatus("capturing", "Keep speaking...");
-  clearVoiceFinalizeTimer();
-  state.voice.finalizeTimer = setTimeout(
-    finalizeVoiceQuery,
-    VOICE_QUERY_SILENCE_MS,
-  );
-}
-
-function startVoiceRecognition() {
-  const recognition = state.voice.recognition;
-  if (!recognition) return;
-  try {
-    recognition.start();
-    updateVoiceStatus("idle");
-  } catch {
-    // Ignore repeated starts while recognition is active.
-  }
-}
-
-function stopVoiceRecognition() {
-  const recognition = state.voice.recognition;
-  if (!recognition) return;
-  clearVoiceFinalizeTimer();
-  state.voice.queryBuffer = "";
-  state.voice.armed = false;
-  try {
-    recognition.stop();
-  } catch {
-    // Ignore stop races.
-  }
-  updateVoiceStatus("off");
-}
-
-function initVoiceControls() {
-  const toggle = el("voiceToggle");
-  const SpeechRecognition =
-    window.SpeechRecognition || window.webkitSpeechRecognition;
-
-  if (!toggle || !SpeechRecognition) {
-    updateVoiceStatus("unsupported");
-    if (toggle) toggle.disabled = true;
-    return;
-  }
-
-  const recognition = new SpeechRecognition();
-  recognition.lang = "en-IN";
-  recognition.continuous = true;
-  recognition.interimResults = true;
-
-  recognition.onresult = (event) => {
-    for (let i = event.resultIndex; i < event.results.length; i += 1) {
-      const result = event.results[i];
-      const transcript = result[0].transcript || "";
-      if (!result.isFinal) {
-        if (state.voice.armed) {
-          updateVoiceStatus(
-            "capturing",
-            `Heard: ${transcript.trim() || "..."}`,
-          );
-        }
-        continue;
-      }
-      handleVoiceFinalTranscript(transcript);
-    }
-  };
-
-  recognition.onend = () => {
-    if (state.voice.enabled) {
-      startVoiceRecognition();
-    }
-  };
-
-  recognition.onerror = () => {
-    if (state.voice.enabled) {
-      updateVoiceStatus("error");
-    }
-  };
-
-  state.voice.recognition = recognition;
-  updateVoiceStatus("off");
-
-  toggle.addEventListener("click", () => {
-    state.voice.enabled = !state.voice.enabled;
-    toggle.textContent = state.voice.enabled ? "Disable Voice" : "Enable Voice";
-    if (state.voice.enabled) {
-      startVoiceRecognition();
-    } else {
-      stopVoiceRecognition();
-    }
-  });
 }
 
 function renderList(target, items, renderItem) {
@@ -332,9 +117,7 @@ function renderList(target, items, renderItem) {
     node.innerHTML = '<div class="empty">No records</div>';
     return;
   }
-  items.forEach((item) =>
-    node.insertAdjacentHTML("beforeend", renderItem(item)),
-  );
+  items.forEach((item) => node.insertAdjacentHTML("beforeend", renderItem(item)));
 }
 
 async function loadStatus() {
@@ -343,19 +126,17 @@ async function loadStatus() {
   try {
     const status = await fetchJson("/api/account/status");
     if (status.error) {
-      console.error("Account status error:", status.error);
       setHTML(
         "profile",
-        `<span style='color:var(--red)'>Failed to load account: ${status.error}</span>`,
+        `<span style="color:var(--red)">Failed to load: ${status.error}</span>`,
       );
       return;
     }
     renderStatus(status);
   } catch (err) {
-    console.warn("loadStatus failed:", err.message);
     setHTML(
       "profile",
-      `<span style='color:var(--red)'>Failed to load: ${err.message}</span>`,
+      `<span style="color:var(--red)">Failed to load: ${err.message}</span>`,
     );
   } finally {
     if (button) button.disabled = false;
@@ -389,10 +170,7 @@ function renderStatus(status) {
   );
 
   setText("holdingCount", String(holdings.length));
-  renderList(
-    "holdings",
-    holdings,
-    (item) => `
+  renderList("holdings", holdings, (item) => `
     <div class="row">
       <div class="row-top">
         <strong>${item.tradingsymbol || "-"}</strong>
@@ -400,14 +178,10 @@ function renderStatus(status) {
       </div>
       <small>Avg ${formatCurrency(item.average_price)} · LTP ${formatCurrency(item.last_price)}</small>
     </div>
-  `,
-  );
+  `);
 
   setText("positionCount", String(positions.length));
-  renderList(
-    "positions",
-    positions,
-    (item) => `
+  renderList("positions", positions, (item) => `
     <div class="row">
       <div class="row-top">
         <strong>${item.tradingsymbol || "-"}</strong>
@@ -415,13 +189,13 @@ function renderStatus(status) {
       </div>
       <small>PNL ${formatCurrency(item.pnl)}</small>
     </div>
-  `,
-  );
+  `);
 }
 
-function addMessage(role, text, options = {}) {
+function addMessage(role, text = "", options = {}) {
   const messages = el("messages");
   if (!messages) return null;
+
   const div = document.createElement("div");
   div.className = `message ${role}`;
   if (options.markdown) {
@@ -432,6 +206,7 @@ function addMessage(role, text, options = {}) {
   } else {
     div.textContent = text;
   }
+
   messages.appendChild(div);
   messages.scrollTop = messages.scrollHeight;
   return div;
@@ -441,25 +216,18 @@ async function sendMessage(event) {
   event.preventDefault();
   const input = el("messageInput");
   if (!input) return;
+
   const message = input.value.trim();
   if (!message) return;
 
   input.value = "";
-  await submitQuery(message);
-}
-
-async function submitQuery(message) {
   addMessage("user", message);
+
   const sendBtn = el("sendBtn");
   if (sendBtn) sendBtn.disabled = true;
 
-  const agentBubble = addMessage("agent", "", {
-    markdown: true,
-    streaming: true,
-  });
+  const agentBubble = addMessage("agent", "", { markdown: true, streaming: true });
   let streamedText = "";
-  let rafId = null;
-  let needsFrame = false;
 
   try {
     const response = await fetch("/api/chat/stream", {
@@ -489,31 +257,6 @@ async function submitQuery(message) {
       if (messages) messages.scrollTop = messages.scrollHeight;
     };
 
-    const rerenderStreamingBubble = () => {
-      if (!agentBubble) return;
-      agentBubble.innerHTML = `
-        <div class="message-content">${escapeHtml(streamedText).replace(/\n/g, "<br>")}</div>
-        <span class="cursor"></span>
-      `;
-      const messages = el("messages");
-      if (messages) messages.scrollTop = messages.scrollHeight;
-    };
-
-    const scheduleStreamingRender = () => {
-      if (rafId) {
-        needsFrame = true;
-        return;
-      }
-      rafId = window.requestAnimationFrame(() => {
-        rafId = null;
-        rerenderStreamingBubble();
-        if (needsFrame) {
-          needsFrame = false;
-          scheduleStreamingRender();
-        }
-      });
-    };
-
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -527,19 +270,19 @@ async function submitQuery(message) {
         const raw = line.slice(6).trim();
         if (!raw) continue;
 
-        let event;
+        let eventData;
         try {
-          event = JSON.parse(raw);
+          eventData = JSON.parse(raw);
         } catch {
           continue;
         }
 
-        if (event.type === "token") {
-          streamedText += event.data;
-          scheduleStreamingRender();
-        } else if (event.type === "pending_action") {
-          if (event.data?.thread_id) {
-            state.threadId = event.data.thread_id;
+        if (eventData.type === "token") {
+          streamedText += eventData.data;
+          rerenderAgentBubble(streamedText, true);
+        } else if (eventData.type === "pending_action") {
+          if (eventData.data?.thread_id) {
+            state.threadId = eventData.data.thread_id;
             setText("threadId", state.threadId.slice(0, 8));
           }
           rerenderAgentBubble(
@@ -547,18 +290,14 @@ async function submitQuery(message) {
             false,
           );
           await loadApprovals();
-        } else if (event.type === "done") {
-          if (rafId) {
-            window.cancelAnimationFrame(rafId);
-            rafId = null;
-          }
-          if (event.thread_id) {
-            state.threadId = event.thread_id;
+        } else if (eventData.type === "done") {
+          if (eventData.thread_id) {
+            state.threadId = eventData.thread_id;
             setText("threadId", state.threadId.slice(0, 8));
           }
           rerenderAgentBubble(streamedText, false);
-        } else if (event.type === "error") {
-          rerenderAgentBubble(`Error: ${event.data}`, false);
+        } else if (eventData.type === "error") {
+          rerenderAgentBubble(`Error: ${eventData.data}`, false);
         }
       }
     }
@@ -586,18 +325,48 @@ async function loadApprovals() {
     }
 
     approvals.forEach((action) => {
+      const argRows = Object.entries(action.arguments)
+        .filter(([k]) => k !== "raw_instruction")
+        .map(
+          ([k, v]) => `
+          <tr>
+            <td class="arg-key">${k}</td>
+            <td class="arg-val">${v}</td>
+          </tr>`,
+        )
+        .join("");
+
       container.insertAdjacentHTML(
         "beforeend",
         `
-        <div class="approval-card">
-          <div>
-            <strong>${action.summary}</strong>
-            <div class="muted">${action.name} · <span class="risk-${action.risk}">${action.risk} risk</span></div>
+        <div class="approval-card" id="approval-${action.id}">
+          <div class="approval-header">
+            <div>
+              <strong>${action.summary}</strong>
+              <div class="muted">
+                ${action.name} ·
+                <span class="risk-${action.risk}">${action.risk} risk</span>
+              </div>
+            </div>
           </div>
-          <pre>${JSON.stringify(action.arguments, null, 2)}</pre>
+          <table class="arg-table">
+            <tbody>${argRows}</tbody>
+          </table>
+          ${
+            action.arguments.raw_instruction
+              ? `
+            <div class="raw-instruction muted">
+              "${action.arguments.raw_instruction}"
+            </div>`
+              : ""
+          }
           <div class="approval-actions">
-            <button class="secondary" data-action="reject" data-id="${action.id}">Reject</button>
-            <button class="danger" data-action="approve" data-id="${action.id}">Approve</button>
+            <button class="secondary" data-action="reject" data-id="${action.id}">
+              Reject
+            </button>
+            <button class="danger" data-action="approve" data-id="${action.id}">
+              Approve
+            </button>
           </div>
         </div>
       `,
@@ -613,32 +382,37 @@ async function decideApproval(event) {
   if (!button) return;
 
   const approved = button.dataset.action === "approve";
-  button.disabled = true;
+  const card = el(`approval-${button.dataset.id}`);
+  if (!card) return;
+
+  card.querySelectorAll("button").forEach((b) => (b.disabled = true));
+
   try {
     const result = await fetchJson(`/api/actions/${button.dataset.id}`, {
       method: "POST",
       body: JSON.stringify({ approved }),
     });
-    addMessage("agent", result.message);
+
+    addMessage(approved ? "agent success" : "agent", result.message);
+
+    if (approved) {
+      await loadStatus();
+    }
     await loadApprovals();
-    await loadStatus();
   } catch (err) {
     addMessage("agent", `Approval error: ${err.message}`);
-    button.disabled = false;
+    card.querySelectorAll("button").forEach((b) => (b.disabled = false));
   }
 }
 
-// Event listeners
 el("refreshStatus")?.addEventListener("click", loadStatus);
 el("chatForm")?.addEventListener("submit", sendMessage);
 el("approvals")?.addEventListener("click", decideApproval);
 
-// Init
 addMessage(
   "agent",
-  "Connected. Ask me about your Zerodha account or prepare an order for approval.",
+  'Connected. Ask me about your account or say something like "buy 10 INFY" to prepare an order.',
 );
-initVoiceControls();
 loadStatus().catch((err) => console.warn("Initial status load failed:", err));
 loadApprovals().catch((err) =>
   console.warn("Initial approvals load failed:", err),
