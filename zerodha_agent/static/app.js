@@ -39,7 +39,18 @@ async function loadStatus() {
   button.disabled = true;
   try {
     const status = await fetchJson("/api/account/status");
+    if (status.error) {
+      console.error("Account status error:", status.error, status.traceback || "");
+      el("mcpState").textContent = "Error";
+      el("mcpState").className = "badge";
+      el("profile").innerHTML = `<span style="color:var(--red)">Failed to load account: ${status.error}</span>`;
+      return;
+    }
     renderStatus(status);
+  } catch (err) {
+    console.warn("loadStatus failed:", err.message);
+    el("mcpState").textContent = "Error";
+    el("mcpState").className = "badge";
   } finally {
     button.disabled = false;
   }
@@ -62,7 +73,9 @@ function renderStatus(status) {
     <span>${profile.broker || "ZERODHA"}</span>
   `;
   el("availableCash").textContent = formatCurrency(available.cash);
-  el("utilisedMargin").textContent = formatCurrency(Object.values(utilised).reduce((sum, value) => sum + (Number(value) || 0), 0));
+  el("utilisedMargin").textContent = formatCurrency(
+    Object.values(utilised).reduce((sum, value) => sum + (Number(value) || 0), 0)
+  );
 
   el("holdingCount").textContent = String(holdings.length);
   renderList("holdings", holdings, (item) => `
@@ -106,42 +119,50 @@ async function sendMessage(event) {
 
   input.value = "";
   addMessage("user", message);
-  const result = await fetchJson("/api/chat", {
-    method: "POST",
-    body: JSON.stringify({ message, thread_id: state.threadId }),
-  });
-  state.threadId = result.thread_id;
-  el("threadId").textContent = state.threadId.slice(0, 8);
-  addMessage("agent", result.message);
-  await loadApprovals();
+  try {
+    const result = await fetchJson("/api/chat", {
+      method: "POST",
+      body: JSON.stringify({ message, thread_id: state.threadId }),
+    });
+    state.threadId = result.thread_id;
+    el("threadId").textContent = state.threadId.slice(0, 8);
+    addMessage("agent", result.message);
+    await loadApprovals();
+  } catch (err) {
+    addMessage("agent", `Error: ${err.message}`);
+  }
 }
 
 async function loadApprovals() {
-  const approvals = await fetchJson("/api/actions");
-  el("approvalCount").textContent = `${approvals.length} pending`;
-  const container = el("approvals");
-  container.innerHTML = "";
+  try {
+    const approvals = await fetchJson("/api/actions");
+    el("approvalCount").textContent = `${approvals.length} pending`;
+    const container = el("approvals");
+    container.innerHTML = "";
 
-  if (!approvals.length) {
-    container.innerHTML = '<div class="empty">No approvals waiting</div>';
-    return;
+    if (!approvals.length) {
+      container.innerHTML = '<div class="empty">No approvals waiting</div>';
+      return;
+    }
+
+    approvals.forEach((action) => {
+      container.insertAdjacentHTML("beforeend", `
+        <div class="approval-card">
+          <div>
+            <strong>${action.summary}</strong>
+            <div class="muted">${action.name} · ${action.risk} risk</div>
+          </div>
+          <pre>${JSON.stringify(action.arguments, null, 2)}</pre>
+          <div class="approval-actions">
+            <button class="secondary" data-action="reject" data-id="${action.id}">Reject</button>
+            <button class="danger" data-action="approve" data-id="${action.id}">Approve</button>
+          </div>
+        </div>
+      `);
+    });
+  } catch (err) {
+    console.warn("loadApprovals failed:", err.message);
   }
-
-  approvals.forEach((action) => {
-    container.insertAdjacentHTML("beforeend", `
-      <div class="approval-card">
-        <div>
-          <strong>${action.summary}</strong>
-          <div class="muted">${action.name} · ${action.risk} risk</div>
-        </div>
-        <pre>${JSON.stringify(action.arguments, null, 2)}</pre>
-        <div class="approval-actions">
-          <button class="secondary" data-action="reject" data-id="${action.id}">Reject</button>
-          <button class="danger" data-action="approve" data-id="${action.id}">Approve</button>
-        </div>
-      </div>
-    `);
-  });
 }
 
 async function decideApproval(event) {
@@ -150,13 +171,17 @@ async function decideApproval(event) {
 
   const approved = button.dataset.action === "approve";
   button.disabled = true;
-  const result = await fetchJson(`/api/actions/${button.dataset.id}`, {
-    method: "POST",
-    body: JSON.stringify({ approved }),
-  });
-  addMessage("agent", result.message);
-  await loadApprovals();
-  await loadStatus();
+  try {
+    const result = await fetchJson(`/api/actions/${button.dataset.id}`, {
+      method: "POST",
+      body: JSON.stringify({ approved }),
+    });
+    addMessage("agent", result.message);
+    await loadApprovals();
+    await loadStatus();
+  } catch (err) {
+    addMessage("agent", `Approval error: ${err.message}`);
+  }
 }
 
 el("refreshStatus").addEventListener("click", loadStatus);
@@ -164,5 +189,5 @@ el("chatForm").addEventListener("submit", sendMessage);
 el("approvals").addEventListener("click", decideApproval);
 
 addMessage("agent", "Connected. Ask me about your Zerodha account or prepare an order for approval.");
-loadStatus();
-loadApprovals();
+loadStatus().catch((err) => console.warn("Initial status load failed:", err));
+loadApprovals().catch((err) => console.warn("Initial approvals load failed:", err));

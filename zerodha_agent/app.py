@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -15,9 +16,6 @@ from zerodha_agent.graph.graph import build_graph
 from zerodha_agent.graph.state import PendingAction
 from zerodha_agent.mcp.client import ZerodhaMCPClient
 from zerodha_agent.mcp.tools import ZerodhaTools
-
-import os
-print("PYTHON sys.path:", os.environ.get("PATH"))
 
 settings = get_settings()
 mcp_client = ZerodhaMCPClient(settings)
@@ -46,26 +44,26 @@ class ActionDecision(BaseModel):
     note: Optional[str] = None
 
 
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon() -> Response:
+    return Response(status_code=204)
+
+
 @app.get("/")
 async def index() -> FileResponse:
     return FileResponse(settings.static_dir / "index.html")
 
 
-import logging
-
-
 @app.get("/api/account/status")
-async def account_status() -> dict[str, Any]:
+async def account_status() -> Any:
     try:
         status = await tools.get_account_status()
         status["updated_at"] = datetime.now(timezone.utc).isoformat()
         return status
     except Exception as e:
         import traceback
-
         tb = traceback.format_exc()
         logging.error(f"Error in /api/account/status: {e}\n{tb}")
-        # Return error details and traceback for debugging (remove in production)
         return {"error": str(e), "type": type(e).__name__, "traceback": tb}
 
 
