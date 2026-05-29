@@ -7,6 +7,7 @@ const state = {
     armed: false,
     recognition: null,
     queryBuffer: "",
+    wakeWindowTimer: null,
     finalizeTimer: null,
   },
 };
@@ -14,6 +15,7 @@ const state = {
 const WAKE_PHRASE = "hello";
 const WAKE_WORD_PATTERN =
   /\b(?:hello|helloo|helo|hallo|hullo)(?:\s+(?:kimbly|kimbli|kimberly|kimberley))?\b/;
+const WAKE_LISTEN_WINDOW_MS = 2000;
 const VOICE_QUERY_SILENCE_MS = 1800;
 
 const formatCurrency = (value) => {
@@ -220,6 +222,23 @@ function clearVoiceFinalizeTimer() {
   }
 }
 
+function clearWakeWindowTimer() {
+  if (state.voice.wakeWindowTimer) {
+    clearTimeout(state.voice.wakeWindowTimer);
+    state.voice.wakeWindowTimer = null;
+  }
+}
+
+function startWakeListenWindow() {
+  clearWakeWindowTimer();
+  state.voice.wakeWindowTimer = setTimeout(() => {
+    if (!state.voice.armed || state.voice.queryBuffer.trim()) return;
+    state.voice.armed = false;
+    setVoiceDraft("");
+    updateVoiceStatus("idle", "No command heard. Sleeping.");
+  }, WAKE_LISTEN_WINDOW_MS);
+}
+
 function setVoiceDraft(text) {
   const draft = String(text || "").trim();
   state.voice.queryBuffer = draft;
@@ -263,6 +282,7 @@ function stopProcessingRequest() {
 }
 
 function finalizeVoiceQuery() {
+  clearWakeWindowTimer();
   clearVoiceFinalizeTimer();
   const query = state.voice.queryBuffer.trim();
   setVoiceDraft("");
@@ -284,10 +304,12 @@ function handleVoiceFinalTranscript(transcript) {
     state.voice.armed = true;
     setVoiceDraft("");
     updateVoiceStatus("wake");
+    startWakeListenWindow();
 
     const remaining = normalized.slice(wake.end).trim();
     if (remaining) {
       setVoiceDraft(remaining);
+      clearWakeWindowTimer();
       updateVoiceStatus("capturing", "Keep speaking...");
       clearVoiceFinalizeTimer();
       state.voice.finalizeTimer = setTimeout(finalizeVoiceQuery, 400);
@@ -299,6 +321,7 @@ function handleVoiceFinalTranscript(transcript) {
 
   const combined = `${state.voice.queryBuffer} ${normalized}`.trim();
   setVoiceDraft(combined);
+  clearWakeWindowTimer();
   updateVoiceStatus("capturing", "Keep speaking...");
   clearVoiceFinalizeTimer();
   state.voice.finalizeTimer = setTimeout(
@@ -321,6 +344,7 @@ function startVoiceRecognition() {
 function stopVoiceRecognition() {
   const recognition = state.voice.recognition;
   if (!recognition) return;
+  clearWakeWindowTimer();
   clearVoiceFinalizeTimer();
   setVoiceDraft("");
   state.voice.armed = false;
@@ -360,10 +384,12 @@ function initVoiceControls() {
             state.voice.armed = true;
             setVoiceDraft("");
             updateVoiceStatus("wake", `Detected: ${wake.phrase}`);
+            startWakeListenWindow();
 
             const remaining = normalized.slice(wake.end).trim();
             if (remaining) {
               setVoiceDraft(remaining);
+              clearWakeWindowTimer();
               updateVoiceStatus("capturing", "Keep speaking...");
               clearVoiceFinalizeTimer();
               state.voice.finalizeTimer = setTimeout(
@@ -381,6 +407,9 @@ function initVoiceControls() {
             ? normalized.slice(interimWake.end).trim()
             : normalized;
           setVoiceDraft(draftText);
+          if (draftText) {
+            clearWakeWindowTimer();
+          }
           updateVoiceStatus(
             "capturing",
             `Heard: ${transcript.trim() || "..."}`,
