@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     zerodha_mcp_command: str = ""
     zerodha_mcp_transport: str = "stdio"
 
+    zerodha_api_key: Optional[str] = None
+    zerodha_api_secret: Optional[str] = None
+    zerodha_access_token: Optional[str] = None
+
+    login_tool: str = "login"
     profile_tool: str = "get_profile"
     margins_tool: str = "get_margins"
     holdings_tool: str = "get_holdings"
