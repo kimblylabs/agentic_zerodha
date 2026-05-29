@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -54,17 +54,17 @@ async def index() -> FileResponse:
     return FileResponse(settings.static_dir / "index.html")
 
 
-@app.get("/api/account/status")
-async def account_status() -> Any:
+@app.get("/api/account/status", response_class=JSONResponse)
+async def account_status() -> JSONResponse:
     try:
         status = await tools.get_account_status()
         status["updated_at"] = datetime.now(timezone.utc).isoformat()
-        return status
+        return JSONResponse(content=status)
     except Exception as e:
         import traceback
         tb = traceback.format_exc()
         logging.error(f"Error in /api/account/status: {e}\n{tb}")
-        return {"error": str(e), "type": type(e).__name__, "traceback": tb}
+        return JSONResponse(status_code=200, content={"error": str(e), "type": type(e).__name__, "traceback": tb})
 
 
 @app.post("/api/chat")
