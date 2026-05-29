@@ -11,19 +11,7 @@ class ZerodhaTools:
         self.client = client
         self.settings = client.settings
 
-    async def _login(self) -> None:
-        await self.client.call_tool(
-            self.settings.login_tool,
-            {
-                "api_key": self.settings.zerodha_api_key,
-                "access_token": self.settings.zerodha_access_token,
-            },
-        )
-
     async def get_account_status(self) -> dict[str, Any]:
-        if self.settings.zerodha_mcp_enabled:
-            await self._login()
-
         results = await asyncio.gather(
             self.client.call_tool(self.settings.profile_tool),
             self.client.call_tool(self.settings.margins_tool),
@@ -47,9 +35,6 @@ class ZerodhaTools:
         }
 
     async def execute_trading_action(self, action_name: str, arguments: dict[str, Any]) -> Any:
-        if self.settings.zerodha_mcp_enabled:
-            await self._login()
-
         tool_name = {
             "place_order":  self.settings.place_order_tool,
             "cancel_order": self.settings.cancel_order_tool,
