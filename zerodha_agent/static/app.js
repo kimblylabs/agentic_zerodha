@@ -1,6 +1,7 @@
 const state = {
   threadId: null,
   isProcessing: false,
+  activeRequestController: null,
   voice: {
     enabled: false,
     armed: false,
@@ -241,12 +242,24 @@ function setProcessingState(isProcessing, source = "text") {
     input.classList.toggle("is-disabled", isProcessing);
   }
 
+  const stopBtn = el("stopBtn");
+  if (stopBtn) {
+    stopBtn.hidden = !isProcessing;
+    stopBtn.disabled = !isProcessing;
+  }
+
   if (!state.voice.enabled) return;
   if (isProcessing) {
     updateVoiceStatus("capturing", "Processing your request...");
   } else if (source === "voice") {
     updateVoiceStatus("idle");
   }
+}
+
+function stopProcessingRequest() {
+  const controller = state.activeRequestController;
+  if (!controller) return;
+  controller.abort("user_stop");
 }
 
 function finalizeVoiceQuery() {
@@ -541,6 +554,7 @@ async function submitQuery(message, { source = "text" } = {}) {
   if (state.isProcessing) return;
   addMessage("user", message);
   setProcessingState(true, source);
+  state.activeRequestController = new AbortController();
 
   const agentBubble = addMessage("agent", "", {
     markdown: true,
@@ -563,6 +577,7 @@ async function submitQuery(message, { source = "text" } = {}) {
     const response = await fetch("/api/chat/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: state.activeRequestController.signal,
       body: JSON.stringify({ message, thread_id: state.threadId }),
     });
 
@@ -662,9 +677,17 @@ async function submitQuery(message, { source = "text" } = {}) {
     }
   } catch (err) {
     if (agentBubble) {
-      agentBubble.innerHTML = `<div class="message-content">Error: ${escapeHtml(err.message)}</div>`;
+      if (err?.name === "AbortError") {
+        const stoppedText = streamedText
+          ? `${streamedText}\n\n_Stopped by user._`
+          : "_Request stopped by user._";
+        agentBubble.innerHTML = `<div class="message-content markdown">${renderMarkdown(stoppedText)}</div>`;
+      } else {
+        agentBubble.innerHTML = `<div class="message-content">Error: ${escapeHtml(err.message)}</div>`;
+      }
     }
   } finally {
+    state.activeRequestController = null;
     setProcessingState(false, source);
     await loadApprovals();
   }
@@ -729,6 +752,7 @@ async function decideApproval(event) {
 // Event listeners
 el("refreshStatus")?.addEventListener("click", loadStatus);
 el("chatForm")?.addEventListener("submit", sendMessage);
+el("stopBtn")?.addEventListener("click", stopProcessingRequest);
 el("approvals")?.addEventListener("click", decideApproval);
 
 // Init

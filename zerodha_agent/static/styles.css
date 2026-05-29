@@ -604,6 +604,14 @@ button.danger {
   margin-top: 16px;
 }
 
+.stop-btn[hidden] {
+  display: none !important;
+}
+
+.stop-btn {
+  min-width: 98px;
+}
+
 .chat-form input {
   flex: 1;
   min-width: 0;
@@ -786,6 +794,10 @@ button.danger {
   .chat-form {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .stop-btn {
+    width: 100%;
   }
 
   .approval-actions {
