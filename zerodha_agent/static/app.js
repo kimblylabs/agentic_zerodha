@@ -1,5 +1,6 @@
 const state = {
   threadId: null,
+  isProcessing: false,
   voice: {
     enabled: false,
     armed: false,
@@ -35,6 +36,12 @@ const setHTML = (id, value) => {
   const node = el(id);
   if (!node) return;
   node.innerHTML = value;
+};
+
+const setInputValue = (value) => {
+  const input = el("messageInput");
+  if (!input) return;
+  input.value = value;
 };
 
 function escapeHtml(text) {
@@ -212,15 +219,46 @@ function clearVoiceFinalizeTimer() {
   }
 }
 
+function setVoiceDraft(text) {
+  const draft = String(text || "").trim();
+  state.voice.queryBuffer = draft;
+  setInputValue(draft);
+}
+
+function setProcessingState(isProcessing, source = "text") {
+  state.isProcessing = isProcessing;
+
+  const sendBtn = el("sendBtn");
+  if (sendBtn) {
+    sendBtn.disabled = isProcessing;
+    sendBtn.classList.toggle("is-loading", isProcessing);
+    sendBtn.textContent = isProcessing ? "Processing" : "Send";
+  }
+
+  const input = el("messageInput");
+  if (input) {
+    input.disabled = isProcessing;
+    input.classList.toggle("is-disabled", isProcessing);
+  }
+
+  if (!state.voice.enabled) return;
+  if (isProcessing) {
+    updateVoiceStatus("capturing", "Processing your request...");
+  } else if (source === "voice") {
+    updateVoiceStatus("idle");
+  }
+}
+
 function finalizeVoiceQuery() {
   clearVoiceFinalizeTimer();
   const query = state.voice.queryBuffer.trim();
-  state.voice.queryBuffer = "";
+  setVoiceDraft("");
   state.voice.armed = false;
   updateVoiceStatus(state.voice.enabled ? "idle" : "off");
   if (query) {
+    setInputValue(query);
     updateVoiceStatus("capturing", "Sending your query...");
-    void submitQuery(query);
+    void submitQuery(query, { source: "voice" });
   }
 }
 
@@ -231,12 +269,13 @@ function handleVoiceFinalTranscript(transcript) {
   const wake = findWakePhrase(normalized);
   if (wake) {
     state.voice.armed = true;
-    state.voice.queryBuffer = "";
+    setVoiceDraft("");
     updateVoiceStatus("wake");
 
     const remaining = normalized.slice(wake.end).trim();
     if (remaining) {
-      state.voice.queryBuffer = remaining;
+      setVoiceDraft(remaining);
+      updateVoiceStatus("capturing", "Keep speaking...");
       clearVoiceFinalizeTimer();
       state.voice.finalizeTimer = setTimeout(finalizeVoiceQuery, 400);
     }
@@ -245,7 +284,8 @@ function handleVoiceFinalTranscript(transcript) {
 
   if (!state.voice.armed) return;
 
-  state.voice.queryBuffer = `${state.voice.queryBuffer} ${normalized}`.trim();
+  const combined = `${state.voice.queryBuffer} ${normalized}`.trim();
+  setVoiceDraft(combined);
   updateVoiceStatus("capturing", "Keep speaking...");
   clearVoiceFinalizeTimer();
   state.voice.finalizeTimer = setTimeout(
@@ -269,7 +309,7 @@ function stopVoiceRecognition() {
   const recognition = state.voice.recognition;
   if (!recognition) return;
   clearVoiceFinalizeTimer();
-  state.voice.queryBuffer = "";
+  setVoiceDraft("");
   state.voice.armed = false;
   try {
     recognition.stop();
@@ -305,12 +345,12 @@ function initVoiceControls() {
           const wake = findWakePhrase(normalized);
           if (wake) {
             state.voice.armed = true;
-            state.voice.queryBuffer = "";
+            setVoiceDraft("");
             updateVoiceStatus("wake", `Detected: ${wake.phrase}`);
 
             const remaining = normalized.slice(wake.end).trim();
             if (remaining) {
-              state.voice.queryBuffer = remaining;
+              setVoiceDraft(remaining);
               updateVoiceStatus("capturing", "Keep speaking...");
               clearVoiceFinalizeTimer();
               state.voice.finalizeTimer = setTimeout(
@@ -323,9 +363,19 @@ function initVoiceControls() {
         }
 
         if (state.voice.armed) {
+          const interimWake = findWakePhrase(normalized);
+          const draftText = interimWake
+            ? normalized.slice(interimWake.end).trim()
+            : normalized;
+          setVoiceDraft(draftText);
           updateVoiceStatus(
             "capturing",
             `Heard: ${transcript.trim() || "..."}`,
+          );
+          clearVoiceFinalizeTimer();
+          state.voice.finalizeTimer = setTimeout(
+            finalizeVoiceQuery,
+            VOICE_QUERY_SILENCE_MS,
           );
         } else if (state.voice.enabled) {
           updateVoiceStatus("idle", `Heard: ${transcript.trim() || "..."}`);
@@ -477,19 +527,20 @@ function addMessage(role, text, options = {}) {
 
 async function sendMessage(event) {
   event.preventDefault();
+  if (state.isProcessing) return;
   const input = el("messageInput");
   if (!input) return;
   const message = input.value.trim();
   if (!message) return;
 
   input.value = "";
-  await submitQuery(message);
+  await submitQuery(message, { source: "text" });
 }
 
-async function submitQuery(message) {
+async function submitQuery(message, { source = "text" } = {}) {
+  if (state.isProcessing) return;
   addMessage("user", message);
-  const sendBtn = el("sendBtn");
-  if (sendBtn) sendBtn.disabled = true;
+  setProcessingState(true, source);
 
   const agentBubble = addMessage("agent", "", {
     markdown: true,
@@ -498,6 +549,15 @@ async function submitQuery(message) {
   let streamedText = "";
   let rafId = null;
   let needsFrame = false;
+
+  if (agentBubble) {
+    agentBubble.innerHTML = `
+      <div class="message-content thinking">
+        <span class="thinking-label">Thinking</span>
+        <span class="thinking-loader" aria-hidden="true"></span>
+      </div>
+    `;
+  }
 
   try {
     const response = await fetch("/api/chat/stream", {
@@ -605,7 +665,7 @@ async function submitQuery(message) {
       agentBubble.innerHTML = `<div class="message-content">Error: ${escapeHtml(err.message)}</div>`;
     }
   } finally {
-    if (sendBtn) sendBtn.disabled = false;
+    setProcessingState(false, source);
     await loadApprovals();
   }
 }

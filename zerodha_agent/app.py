@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import traceback
@@ -101,6 +102,10 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
 
     async def event_generator():
         try:
+            # Initial heartbeat helps some clients/proxies start streaming mode immediately.
+            yield ": stream-start\n\n"
+            await asyncio.sleep(0)
+
             async for token in stream_response(request.message, account_status):
                 if token.startswith("__PENDING_ACTION__:"):
                     raw = token[len("__PENDING_ACTION__:") :]
@@ -111,8 +116,10 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
                     pending_payload = pending_actions[action_id].model_dump()
                     pending_payload["thread_id"] = thread_id
                     yield f"data: {json.dumps({'type': 'pending_action', 'data': pending_payload})}\n\n"
+                    await asyncio.sleep(0)
                 else:
                     yield f"data: {json.dumps({'type': 'token', 'data': token})}\n\n"
+                    await asyncio.sleep(0)
 
             yield f"data: {json.dumps({'type': 'done', 'thread_id': thread_id})}\n\n"
         except Exception as e:

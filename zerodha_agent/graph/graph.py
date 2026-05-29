@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import datetime
 import json
 import os
@@ -115,7 +116,11 @@ async def _llm_response(user_message: str, account_status: dict[str, Any]) -> st
 async def _llm_stream(
     user_message: str, account_status: dict[str, Any]
 ) -> AsyncGenerator[str, None]:
-    llm = ChatOpenAI(model=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"), temperature=0.2)
+    llm = ChatOpenAI(
+        model=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
+        temperature=0.2,
+        streaming=True,
+    )
     snapshot = json.dumps(account_status, indent=2, default=_json_safe)
     async for chunk in llm.astream(
         [
@@ -144,7 +149,11 @@ async def stream_response(
         async for token in _llm_stream(user_message, account_status):
             yield token
     else:
-        yield _fallback_response(user_message, account_status)
+        text = _fallback_response(user_message, account_status)
+        chunk_size = 24
+        for index in range(0, len(text), chunk_size):
+            yield text[index : index + chunk_size]
+            await asyncio.sleep(0)
 
 
 def _fallback_response(user_message: str, account_status: dict[str, Any]) -> str:
