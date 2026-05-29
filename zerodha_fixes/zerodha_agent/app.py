@@ -7,17 +7,20 @@ from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from zerodha_agent.config.settings import get_settings
 from zerodha_agent.graph.graph import build_graph
 from zerodha_agent.graph.state import PendingAction
-from zerodha_agent.tools import trading_tools
+from zerodha_agent.mcp.client import ZerodhaMCPClient
+from zerodha_agent.mcp.tools import ZerodhaTools
 
 settings = get_settings()
-agent_graph = build_graph(trading_tools)
+mcp_client = ZerodhaMCPClient(settings)
+tools = ZerodhaTools(mcp_client)
+agent_graph = build_graph(tools)
 pending_actions: dict[str, PendingAction] = {}
 
 app = FastAPI(title=settings.app_name)
@@ -51,30 +54,17 @@ async def index() -> FileResponse:
     return FileResponse(settings.static_dir / "index.html")
 
 
-@app.get("/api/account/status", response_class=JSONResponse)
-async def account_status() -> JSONResponse:
+@app.get("/api/account/status")
+async def account_status() -> Any:
     try:
-        profile = trading_tools.get_profile()
-        holdings = trading_tools.get_holdings()
-        positions = trading_tools.get_positions()
-        orders = trading_tools.get_orders()
-        margins = trading_tools.get_margins()
-        return {
-            "profile": profile,
-            "holdings": holdings,
-            "positions": positions,
-            "orders": orders,
-            "margins": margins,
-        }
+        status = await tools.get_account_status()
+        status["updated_at"] = datetime.now(timezone.utc).isoformat()
+        return status
     except Exception as e:
         import traceback
-
         tb = traceback.format_exc()
         logging.error(f"Error in /api/account/status: {e}\n{tb}")
-        return JSONResponse(
-            status_code=500,
-            content={"error": str(e), "type": type(e).__name__, "traceback": tb},
-        )
+        return {"error": str(e), "type": type(e).__name__, "traceback": tb}
 
 
 @app.post("/api/chat")

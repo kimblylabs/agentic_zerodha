@@ -11,9 +11,16 @@
       <section class="topbar">
         <div>
           <p class="eyebrow">Zerodha MCP</p>
+                    <p class="eyebrow">Zerodha Direct</p>
           <h1>Account Console</h1>
         </div>
-        <button id="refreshStatus" class="icon-button" title="Refresh account status">Refresh</button>
+        <button
+          id="refreshStatus"
+          class="icon-button"
+          title="Refresh account status"
+        >
+          Refresh
+        </button>
       </section>
 
       <section class="status-grid">
@@ -22,6 +29,9 @@
             <h2>Account</h2>
             <span id="mcpState" class="badge">Checking</span>
           </div>
+          <button id="connectZerodha" style="margin-bottom: 1em">
+
+
           <div id="profile" class="profile"></div>
           <div class="metric-row">
             <div>
@@ -68,7 +78,12 @@
           </div>
           <div id="messages" class="messages"></div>
           <form id="chatForm" class="chat-form">
-            <input id="messageInput" type="text" autocomplete="off" placeholder="Ask about holdings, margins, orders, or prepare a trade..." />
+            <input
+              id="messageInput"
+              type="text"
+              autocomplete="off"
+              placeholder="Ask about holdings, margins, orders, or prepare a trade..."
+            />
             <button type="submit">Send</button>
           </form>
         </article>

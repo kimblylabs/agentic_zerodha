@@ -10,13 +10,13 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import END, StateGraph
 
 from zerodha_agent.graph.state import AgentState, PendingAction
-from zerodha_agent.mcp.tools import ZerodhaTools
+from zerodha_agent.tools import trading_tools
 from zerodha_agent.prompts.system_prompt import SYSTEM_PROMPT
 
 TRADING_KEYWORDS = ("buy", "sell", "place order", "cancel order", "modify order")
 
 
-def build_graph(tools: ZerodhaTools):
+def build_graph(tools):
     workflow = StateGraph(AgentState)
     workflow.add_node("load_account", _load_account(tools))
     workflow.add_node("reason", _reason(tools))
@@ -26,7 +26,7 @@ def build_graph(tools: ZerodhaTools):
     return workflow.compile()
 
 
-def _load_account(tools: ZerodhaTools):
+def _load_account(tools):
     async def node(state: AgentState) -> AgentState:
         state["account_status"] = await tools.get_account_status()
         return state
@@ -34,7 +34,7 @@ def _load_account(tools: ZerodhaTools):
     return node
 
 
-def _reason(tools: ZerodhaTools):
+def _reason(tools):
     async def node(state: AgentState) -> AgentState:
         user_message = state["messages"][-1]["content"]
         risky_action = _extract_risky_action(user_message)
@@ -48,9 +48,13 @@ def _reason(tools: ZerodhaTools):
             return state
 
         if os.getenv("OPENAI_API_KEY"):
-            state["final_response"] = await _llm_response(user_message, state["account_status"])
+            state["final_response"] = await _llm_response(
+                user_message, state["account_status"]
+            )
         else:
-            state["final_response"] = _fallback_response(user_message, state["account_status"])
+            state["final_response"] = _fallback_response(
+                user_message, state["account_status"]
+            )
 
         return state
 
@@ -79,7 +83,9 @@ def _fallback_response(user_message: str, account_status: dict[str, Any]) -> str
         holdings = account_status.get("holdings", [])
         if not holdings:
             return "I do not see any holdings in the current Zerodha snapshot."
-        symbols = ", ".join(item.get("tradingsymbol", "Unknown") for item in holdings[:5])
+        symbols = ", ".join(
+            item.get("tradingsymbol", "Unknown") for item in holdings[:5]
+        )
         return f"Your current holdings include {symbols}."
     if "margin" in lowered or "fund" in lowered:
         margins = account_status.get("margins", {})

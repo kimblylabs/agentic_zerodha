@@ -23,15 +23,11 @@ class Settings(BaseSettings):
     langsmith_api_key: Optional[str] = None
     langsmith_project: str = "zerodha-agent"
 
-    zerodha_mcp_enabled: bool = False
-    zerodha_mcp_command: str = ""
-    zerodha_mcp_transport: str = "stdio"
-
     zerodha_api_key: Optional[str] = None
     zerodha_api_secret: Optional[str] = None
     zerodha_access_token: Optional[str] = None
 
-    login_tool: str = "login"
+    # login_tool removed (no login flow)
     profile_tool: str = "get_profile"
     margins_tool: str = "get_margins"
     holdings_tool: str = "get_holdings"
@@ -49,10 +45,6 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
-
-    @property
-    def mcp_command_parts(self) -> list[str]:
-        return shlex.split(self.zerodha_mcp_command)
 
 
 @lru_cache

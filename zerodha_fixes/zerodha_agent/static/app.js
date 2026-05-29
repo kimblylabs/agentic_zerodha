@@ -9,6 +9,7 @@ const formatCurrency = (value) => {
     currency: "INR",
     maximumFractionDigits: 0,
   }).format(value);
+};
 
 const el = (id) => document.getElementById(id);
 
@@ -30,9 +31,7 @@ function renderList(target, items, renderItem) {
     node.innerHTML = '<div class="empty">No records</div>';
     return;
   }
-  items.forEach((item) =>
-    node.insertAdjacentHTML("beforeend", renderItem(item)),
-  );
+  items.forEach((item) => node.insertAdjacentHTML("beforeend", renderItem(item)));
 }
 
 async function loadStatus() {
@@ -41,14 +40,17 @@ async function loadStatus() {
   try {
     const status = await fetchJson("/api/account/status");
     if (status.error) {
-      console.error("Account status error:", status.error);
-      el("profile").innerHTML = `<span style='color:var(--red)'>Failed to load account: ${status.error}</span>`;
+      console.error("Account status error:", status.error, status.traceback || "");
+      el("mcpState").textContent = "Error";
+      el("mcpState").className = "badge";
+      el("profile").innerHTML = `<span style="color:var(--red)">Failed to load account: ${status.error}</span>`;
       return;
     }
     renderStatus(status);
   } catch (err) {
     console.warn("loadStatus failed:", err.message);
-    el("profile").innerHTML = `<span style='color:var(--red)'>Failed to load account: ${err.message}</span>`;
+    el("mcpState").textContent = "Error";
+    el("mcpState").className = "badge";
   } finally {
     button.disabled = false;
   }
@@ -72,47 +74,32 @@ function renderStatus(status) {
   `;
   el("availableCash").textContent = formatCurrency(available.cash);
   el("utilisedMargin").textContent = formatCurrency(
-    Object.values(utilised).reduce(
-      (sum, value) => sum + (Number(value) || 0),
-      0,
-    ),
+    Object.values(utilised).reduce((sum, value) => sum + (Number(value) || 0), 0)
   );
 
   el("holdingCount").textContent = String(holdings.length);
-  renderList(
-    "holdings",
-    holdings,
-    (item) => `
+  renderList("holdings", holdings, (item) => `
     <div class="row">
       <div class="row-top"><strong>${item.tradingsymbol || "-"}</strong><span>${item.quantity ?? "-"} qty</span></div>
       <small>Avg ${formatCurrency(item.average_price)} · LTP ${formatCurrency(item.last_price)}</small>
     </div>
-  `,
-  );
+  `);
 
   el("positionCount").textContent = String(positions.length);
-  renderList(
-    "positions",
-    positions,
-    (item) => `
+  renderList("positions", positions, (item) => `
     <div class="row">
       <div class="row-top"><strong>${item.tradingsymbol || "-"}</strong><span>${item.quantity ?? "-"} qty</span></div>
       <small>PNL ${formatCurrency(item.pnl)}</small>
     </div>
-  `,
-  );
+  `);
 
   el("orderCount").textContent = String(orders.length);
-  renderList(
-    "orders",
-    orders,
-    (item) => `
+  renderList("orders", orders, (item) => `
     <div class="row">
       <div class="row-top"><strong>${item.tradingsymbol || item.order_id || "-"}</strong><span>${item.status || "-"}</span></div>
       <small>${item.order_id || ""} ${item.quantity ? `· ${item.quantity} qty` : ""}</small>
     </div>
-  `,
-  );
+  `);
 }
 
 function addMessage(role, text) {
@@ -159,9 +146,7 @@ async function loadApprovals() {
     }
 
     approvals.forEach((action) => {
-      container.insertAdjacentHTML(
-        "beforeend",
-        `
+      container.insertAdjacentHTML("beforeend", `
         <div class="approval-card">
           <div>
             <strong>${action.summary}</strong>
@@ -173,8 +158,7 @@ async function loadApprovals() {
             <button class="danger" data-action="approve" data-id="${action.id}">Approve</button>
           </div>
         </div>
-      `,
-      );
+      `);
     });
   } catch (err) {
     console.warn("loadApprovals failed:", err.message);
@@ -204,11 +188,6 @@ el("refreshStatus").addEventListener("click", loadStatus);
 el("chatForm").addEventListener("submit", sendMessage);
 el("approvals").addEventListener("click", decideApproval);
 
-addMessage(
-  "agent",
-  "Connected. Ask me about your Zerodha account or prepare an order for approval."
-);
+addMessage("agent", "Connected. Ask me about your Zerodha account or prepare an order for approval.");
 loadStatus().catch((err) => console.warn("Initial status load failed:", err));
-loadApprovals().catch((err) =>
-  console.warn("Initial approvals load failed:", err)
-);
+loadApprovals().catch((err) => console.warn("Initial approvals load failed:", err));
